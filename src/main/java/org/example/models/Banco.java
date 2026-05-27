@@ -1,6 +1,7 @@
 package org.example.models;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 public class Banco {
@@ -9,6 +10,7 @@ public class Banco {
 
     public Banco(String nombre) {
         this.nombre = nombre;
+        this.cuentas = new ArrayList<>();
     }
 
     public String getNombre() {return nombre;}
@@ -19,6 +21,7 @@ public class Banco {
 
     public void addCuenta (Cuenta cuenta){
         cuentas.add(cuenta);
+        cuenta.setBanco(this);
     }
 
 
