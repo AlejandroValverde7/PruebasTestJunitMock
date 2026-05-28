@@ -4,10 +4,19 @@ import org.example.exceptions.DineroInsuicienteException;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.*;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvFileSource;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -15,16 +24,23 @@ import static org.junit.jupiter.api.Assumptions.*;
 
 class CuentaTest {
     Cuenta cuenta;
+    private TestInfo testInfo;
+    private TestReporter testReporter;
 
     //Metodos de ciclo de vida
 
     //Indicamos que se debe ejecutar antes de cada metodo, si tenemos esto no tendremos que crear la cuenta para cada test
+    //Con testInfo y testReporter recibimos informacion sobre los tests
     @BeforeEach
-    void initMetodoTest(){
-        System.out.println("Iniciando el metodo");
+    void initMetodoTest(TestInfo testInfo,TestReporter testReporter){
 
         //Con esto podriamos crear una instancia cuenta para todos los metodos
         this.cuenta = new Cuenta("Andres", new BigDecimal(1000.12345));
+        this.testInfo = testInfo;
+        this.testReporter = testReporter;
+
+        System.out.println("Ejecutando: "+testInfo.getDisplayName()+" "+testInfo.getTestClass()+
+                " con las etiquetas: "+testInfo.getTags());
     }
 
     //Se ejecutara despues de cada test
@@ -46,15 +62,18 @@ class CuentaTest {
         System.out.println("Finalizando el test");
     }
 
+    @Tag("Cuenta")
     @Nested
     class CuentaOperacionesTest{
     @Test
     @Disabled //Con disable el test se saltara por si estamos testeando algo sin implementar del todo
     @DisplayName("Probando nombre de la cuenta corriente")
     void testNombreCuenta(){
-        fail();
-        //Damos los datos a el objeto
-        Cuenta cuenta = new Cuenta("Andres", new BigDecimal(1000.12345));
+
+        if(testInfo.getTags().contains("Cuenta")){
+            System.out.println("Contiene la etiqueta cuenta");
+        }
+
 //        cuenta.setPersona("Andres");
         String esperado = "Andres";
         String real = cuenta.getPersona();
@@ -279,4 +298,98 @@ class CuentaTest {
         assertEquals(900,cuenta.getSaldo().intValue());
         assertEquals("900.12345",cuenta.getSaldo().toPlainString());
     }
+
+    @Tag("param")
+    @Nested
+    class TestParametrizados{
+    //Con parametrized test podemos agregar varios valores de prueba para un test
+    //En monto tendremo los strings de valursource
+    @ParameterizedTest(name = "numero {index} ejecurantando con el valor {0} - {argumentsWithNames}")
+    @ValueSource(doubles = {100,200,300,500,700,1000})
+    void testDebitoCuentaValueSource(Double monto){
+        cuenta.debito(new BigDecimal(monto));
+        assertNotNull(cuenta.getSaldo());
+        assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
+    }
+
+    @ParameterizedTest(name = "numero {index} ejecurantando con el valor {0} - {argumentsWithNames}")
+    @CsvSource({"1,100","2,200","3,300","4,600","5,1000",})
+    void testDebitoCuentaCsvSource(String index, String monto){
+        System.out.println(index + " -> "+monto);
+        cuenta.debito(new BigDecimal(monto));
+        assertNotNull(cuenta.getSaldo());
+        assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
+    }
+
+    //Prueba con 2 argumentos cambiando el saldo
+    //fallara en las q tengan saldo menor q lo que se reira
+    @ParameterizedTest(name = "numero {index} ejecurantando con el valor {0} - {argumentsWithNames}")
+    @CsvSource({"200,100","250,200","300.1,300","601,600","1000.12345,1000",})
+    void testDebitoCuentaCsvSource2(String saldo, String monto){
+        System.out.println(saldo + " -> "+monto);
+        cuenta.setSaldo(new BigDecimal(saldo));
+        cuenta.debito(new BigDecimal(monto));
+        assertNotNull(cuenta.getSaldo());
+        assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
+    }
+
+    @ParameterizedTest(name = "numero {index} ejecurantando con el valor {0} - {argumentsWithNames}")
+    @CsvFileSource(resources = "/data.csv")
+    void testDebitoCuentaCsvFileSource(String monto){
+        cuenta.debito(new BigDecimal(monto));
+        assertNotNull(cuenta.getSaldo());
+        assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
+    }
+
+    //Cargamos por medio de un metodo los montos
+    @ParameterizedTest(name = "numero {index} ejecurantando con el valor {0} - {argumentsWithNames}")
+    @MethodSource("montoList")
+    void testDebitoCuentaMethodSource(String monto){
+        cuenta.debito(new BigDecimal(monto));
+        assertNotNull(cuenta.getSaldo());
+        assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
+    }
+
+    static private List<String> montoList(){
+        return Arrays.asList("100","200","300","500","700","1000");
+    }
+
+    @ParameterizedTest(name = "numero {index} ejecurantando con el valor {0} - {argumentsWithNames}")
+    @CsvFileSource(resources = "/data2.csv")
+    void testDebitoCuentaCsvFileSource2(String saldo, String monto, String esperado, String actual){
+        cuenta.debito(new BigDecimal(monto));
+        cuenta.setSaldo(new BigDecimal(saldo));
+        cuenta.setPersona(actual);
+
+        assertEquals(esperado,actual);
+        assertNotNull(cuenta.getSaldo());
+        assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
+    }
+    }
+
+    @Nested
+    @Tag("Timeout")
+    class EjemplosTimeoutTest {
+        //SI pasan mas de 5 segundos la prueba se dara por fallida
+        @Test
+        @Timeout(5)
+        void pruebaTimeout() throws InterruptedException {
+            TimeUnit.SECONDS.sleep(2);
+        }
+
+        //Podemos indicar el valor y la unidad de valor del timeout
+        @Test
+        @Timeout(value = 2000, unit = TimeUnit.MILLISECONDS)
+        void pruebaTimeout2() throws InterruptedException {
+            TimeUnit.SECONDS.sleep(1);
+        }
+
+        @Test
+        void testTimeoutAssertions() throws InterruptedException {
+            assertTimeout(Duration.ofSeconds(5), () -> {
+                TimeUnit.MILLISECONDS.sleep(400);
+            });
+        }
+    }
+
 }
